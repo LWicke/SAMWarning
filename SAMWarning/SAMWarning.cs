@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using Oxide.Core.Plugins;
+using Oxide.Core.Configuration;
+using Oxide.Core;
+using Oxide.Core.Libraries.Covalence;
 
 namespace Oxide.Plugins
 {
@@ -20,6 +23,7 @@ namespace Oxide.Plugins
         private static float firingRange;
         private static String warningMsg;
         private static String firingMsg;
+   
 
         protected override void LoadDefaultConfig()
         {
@@ -30,7 +34,7 @@ namespace Oxide.Plugins
             SaveConfig();
         }
         #endregion
-        #region Oxide Hooks
+        #region Oxide_Hooks
         private void OnServerInitialized()
         {
             //configure all existing SamSites
@@ -56,15 +60,15 @@ namespace Oxide.Plugins
 
 
 
-        private object CanSamSiteShoot(SamSite site)
+        private object CanSamSiteShoot(SamSite samSite)
         {
-            if (site == null) return 1;
+            if (samSite == null) return false;
 
             List<BasePlayer> targetPlayers = new List<BasePlayer>();
-            switch (site.currentTarget.prefabID)
+            switch (samSite.currentTarget.prefabID)
             {
                 case 2278499844: //minicopter
-                    MiniCopter targetCopter = site.currentTarget as MiniCopter;
+                    MiniCopter targetCopter = samSite.currentTarget as MiniCopter;
                     BaseVehicleSeat driverSeat = null;
                     //if (targetCopter == null) PrintToChat("copter not found");
                     if (targetCopter != null) driverSeat = targetCopter.GetComponentsInChildren<BaseVehicleSeat>()[0];
@@ -73,7 +77,7 @@ namespace Oxide.Plugins
                     break;
 
                 case 3111236903: //hotairballoon
-                    HotAirBalloon targetBalloon = site.currentTarget as HotAirBalloon;
+                    HotAirBalloon targetBalloon = samSite.currentTarget as HotAirBalloon;
                     Vis.Entities(targetBalloon.transform.position, 2, targetPlayers);
                     break;
 
@@ -84,7 +88,7 @@ namespace Oxide.Plugins
             if (targetPlayers.Count == 0) return null;
 
             //calculate distance
-            float distance = Vector3.Distance(site.transform.position, site.currentTarget.transform.position);
+            float distance = Vector3.Distance(samSite.transform.position, samSite.currentTarget.transform.position);
 
             //warning
             if (distance > firingRange)
@@ -92,7 +96,7 @@ namespace Oxide.Plugins
                 foreach (var player in targetPlayers)
                 {
                     //player.ChatMessage(warningMsg);
-                    GUIAnnouncements?.Call("CreateAnnouncement", warningMsg, "grey", "white", player);
+                    GUIAnnouncements?.Call("CreateAnnouncement", getCustomMsg(false, samSite.GetInstanceID()), "grey", "white", player);
                     return false;
                 }
             }
@@ -103,7 +107,7 @@ namespace Oxide.Plugins
                 foreach (var player in targetPlayers)
                 {
                     //player.ChatMessage(firingMsg);
-                    GUIAnnouncements?.Call("CreateAnnouncement", firingMsg, "red", "white", player);
+                    GUIAnnouncements?.Call("CreateAnnouncement", getCustomMsg(true, samSite.GetInstanceID()), "red", "white", player);
                     return null;
                 }
             }
@@ -111,8 +115,126 @@ namespace Oxide.Plugins
         }
 
         #endregion
-        #region helper
+        #region commands
 
+        [ChatCommand("warningMsg")]
+        private void CustomWarning(BasePlayer player, string command, string[] args)
+        {
+            if (args.Length >= 1)
+            {
+                RaycastHit hit = new RaycastHit();
+                if (Physics.Raycast(player.eyes.HeadRay(), out hit, float.MaxValue))
+                {
+                    var entity = hit.GetEntity();
+                    if (entity.GetBuildingPrivilege().authorizedPlayers.Any(x => x.userid == player.userID))
+                    {
+                        if (entity is SamSite)
+                        {
+                            setCustomMsg(false, entity.GetInstanceID(), args[0]);
+                            player.ChatMessage("custom Message saved");
+                        }
+                        else player.ChatMessage("you are not looking at a SAM Site!");
+                    }
+                    else
+                    {
+                        player.ChatMessage("you are not authorized here!");
+                    }
+                }
+            }
+        }
+
+        [ChatCommand("firingMsg")]
+        private void CustomFiring(BasePlayer player, string command, string[] args) {
+            if (args.Length >= 1)
+            {
+                RaycastHit hit = new RaycastHit();
+                if (Physics.Raycast(player.eyes.HeadRay(), out hit, float.MaxValue))
+                {
+                    var entity = hit.GetEntity();
+                    if (entity.GetBuildingPrivilege().authorizedPlayers.Any(x => x.userid == player.userID))
+                    {
+                        if (entity is SamSite)
+                        {
+                            setCustomMsg(true, entity.GetInstanceID(), args[0]);
+                            player.ChatMessage("custom Message saved");
+                        }
+                        else player.ChatMessage("you are not looking at a SAM Site!");
+                    }
+                    else
+                    {
+                        player.ChatMessage("you are not authorized here!");
+                    }
+                }
+            }
+        }
+
+        [ChatCommand("removeMsg")]
+        private void customClear(BasePlayer player, string command, string[] args) {
+            if (args.Length >= 1)
+            {
+                RaycastHit hit = new RaycastHit();
+                if (Physics.Raycast(player.eyes.HeadRay(), out hit, float.MaxValue))
+                {
+                    var entity = hit.GetEntity();
+                    if (entity.GetBuildingPrivilege().authorizedPlayers.Any(x => x.userid == player.userID))
+                    {
+                        if (entity is SamSite)
+                    {
+                        String ID = entity.GetInstanceID().ToString();
+                        //removing msgs
+                        DynamicConfigFile warnings = Interface.Oxide.DataFileSystem.GetDatafile("warningMsgs");
+                        DynamicConfigFile firings = Interface.Oxide.DataFileSystem.GetDatafile("firingMsgs");
+                        warnings.Remove(ID);
+                        firings.Remove(ID);
+
+                        player.ChatMessage("custom Messages removed");
+                    }
+                    else player.ChatMessage("you are not looking at a SAM Site!");
+                    }
+                    else
+                    {
+                        player.ChatMessage("you are not authorized here!");
+                    }
+                }
+            }
+        }
+
+
+        #endregion
+        #region helper
+        private String getCustomMsg(bool firing, int ID)
+        {
+            DynamicConfigFile dataFile = null;
+            if (firing)
+            {
+                dataFile = Interface.Oxide.DataFileSystem.GetDatafile("firingMsgs");
+            }
+            else
+            {
+                dataFile = Interface.Oxide.DataFileSystem.GetDatafile("warningMsgs");
+            }
+            if (dataFile[ID.ToString()] != null)
+            {
+                return (String)dataFile[ID.ToString()];
+            }
+            else if (firing) return firingMsg;
+            else return warningMsg;
+        }
+
+        private void setCustomMsg(bool firing, int ID, String input)
+        {
+            DynamicConfigFile dataFile = null;
+            if (firing)
+            {
+                dataFile = Interface.Oxide.DataFileSystem.GetDatafile("firingMsgs");
+            }
+            else
+            {
+                dataFile = Interface.Oxide.DataFileSystem.GetDatafile("warningMsgs");
+            }
+            dataFile[ID.ToString()] = input;
+            dataFile.Save();
+        }
         T GetConfig<T>(string name, T defaultValue) => Config[name] == null ? defaultValue : (T)Convert.ChangeType(Config[name], typeof(T));
         #endregion
 
