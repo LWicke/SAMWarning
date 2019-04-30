@@ -54,7 +54,7 @@ namespace Oxide.Plugins
             }
         }
 
-        
+
 
         private object CanSamSiteShoot(SamSite site)
         {
@@ -66,9 +66,9 @@ namespace Oxide.Plugins
                 case 2278499844: //minicopter
                     MiniCopter targetCopter = site.currentTarget as MiniCopter;
                     BaseVehicleSeat driverSeat = null;
-                    if (targetCopter == null) PrintToChat("copter not found");
-                    if(targetCopter != null) driverSeat = targetCopter.GetComponentsInChildren<BaseVehicleSeat>()[0];
-                    if (driverSeat == null) PrintToChat("seat not found");
+                    //if (targetCopter == null) PrintToChat("copter not found");
+                    if (targetCopter != null) driverSeat = targetCopter.GetComponentsInChildren<BaseVehicleSeat>()[0];
+                    //if (driverSeat == null) PrintToChat("seat not found");
                     if (driverSeat != null) targetPlayers.Add(driverSeat._mounted);
                     break;
 
@@ -78,7 +78,7 @@ namespace Oxide.Plugins
                     break;
 
                 default:
-                    return 1;
+                    return false;
             }
 
             if (targetPlayers.Count == 0) return null;
@@ -93,8 +93,7 @@ namespace Oxide.Plugins
                 {
                     //player.ChatMessage(warningMsg);
                     GUIAnnouncements?.Call("CreateAnnouncement", warningMsg, "grey", "white", player);
-                    return 1;
-
+                    return false;
                 }
             }
 
@@ -106,16 +105,9 @@ namespace Oxide.Plugins
                     //player.ChatMessage(firingMsg);
                     GUIAnnouncements?.Call("CreateAnnouncement", firingMsg, "red", "white", player);
                     return null;
-
-
                 }
             }
-            return 1;
-        }
-
-        private object CanSamSiteShoot()
-        {
-            return 1;
+            return false;
         }
 
         #endregion
